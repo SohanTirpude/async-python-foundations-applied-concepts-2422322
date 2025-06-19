@@ -1,5 +1,5 @@
 import asyncio
-import aioredis
+from redis import asyncio as aioredis
 import click
 import json
 
@@ -9,7 +9,8 @@ class Chat:
         self.room_name = room_name
 
     async def start_db(self):
-        self.redis = await aioredis.create_redis_pool("redis://localhost")
+        pool = aioredis.ConnectionPool.from_url("redis://localhost")
+        self.redis = aioredis.Redis.from_pool(pool)
         await self.redis.set("room_name", self.room_name)
 
     async def save_message(self, message_dictionary):
@@ -22,7 +23,7 @@ class Chat:
 
     async def get_all_messages(self):
         room_name = await self.redis.get("room_name")
-        message_jsons = await self.redis.lrange(room_name, 0, -1, encoding="utf-8")
+        message_jsons = await self.redis.lrange(room_name, 0, -1)
         messages = []
         for message in message_jsons:
             message_dictionary = json.loads(message)
