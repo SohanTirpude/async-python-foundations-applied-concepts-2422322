@@ -17,7 +17,7 @@ import json
 import asyncio
 
 import click
-import aioredis
+from redis import asyncio as aioredis
 
 
 class Chat:
@@ -25,7 +25,8 @@ class Chat:
         self.room_name = room_name
 
     async def start_db(self):
-        self.redis = await aioredis.create_redis_pool("redis://localhost")
+        pool = aioredis.ConnectionPool.from_url("redis://localhost")
+        self.redis = aioredis.Redis.from_pool(pool)
         await self.redis.set("room_name", self.room_name)
 
     async def save_message(self, message_json):
@@ -37,7 +38,7 @@ class Chat:
 
     async def get_all_messages(self):
         room_name = await self.redis.get("room_name")
-        message_jsons = await self.redis.lrange(room_name, 0, -1, encoding="utf-8")
+        message_jsons = await self.redis.lrange(room_name, 0, -1)
         messages = []
         for message in message_jsons:
             message_dictionary = json.loads(message)
@@ -46,7 +47,7 @@ class Chat:
         return messages
 
     async def get_name(self):
-        return await self.redis.get("room_name", encoding="utf-8")
+        return await self.redis.get("room_name")
 
 
 chat_db = Chat("chat_room")
@@ -63,7 +64,10 @@ async def ws():
     try:
         while True:
             message = await websocket.receive()
+
             # save the message
+            await chat_db.save_message(message)
+
             send_coroutines = [connection.send(message) for connection in connections]
             await asyncio.gather(*send_coroutines)
     finally:
@@ -73,7 +77,7 @@ async def ws():
 @app.route("/")
 async def chat():
     redis = get_redis()
-    messages = [] # replace the empty list with your code
+    messages = await chat_db.get_all_messages() # replace the empty list with your code
     return await render_template("chat_redis.html", messages=messages)
 
 
